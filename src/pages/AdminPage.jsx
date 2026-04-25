@@ -3,9 +3,11 @@ import VerkopersBeheer from "../components/verkopers/VerkopersBeheer";
 import CustomersBeheer from "../components/customers/CustomersBeheer";
 import InvoicesBeheer from "../components/invoices/InvoicesBeheer";
 import CustomerLocationsBeheer from "../components/customers/CustomerLocationsBeheer";
+import { useNavigate } from "react-router-dom";
 
 export default function AdminPage() {
   const [activeSection, setActiveSection] = useState(null);
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-6">
@@ -46,6 +48,16 @@ export default function AdminPage() {
           <div className="mb-2 text-lg font-bold">Beheer klanten</div>
           <div className="text-sm text-gray-600">
             Importeer klanten uit Klanten.xlsx en Klanten2.xlsx.
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigate("/beheer/gebruikers")}
+          className="rounded-xl border p-6 text-left transition bg-white hover:bg-gray-50"
+        >
+          <div className="mb-2 text-lg font-bold">Beheer gebruikers</div>
+          <div className="text-sm text-gray-600">
+            Beheer toegang, rollen en verkopercodes van gebruikers.
           </div>
         </button>
 

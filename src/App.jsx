@@ -10,6 +10,7 @@ import ProductsPage from "./pages/ProductsPage";
 import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminPage from "./pages/AdminPage";
+import UsersAdminPage from "./pages/UsersAdminPage";
 
 import logo from "./assets/logo.png";
 
@@ -214,6 +215,7 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/beheer/gebruikers" element={<UsersAdminPage />} />
         </Routes>
       </main>
     </div>
