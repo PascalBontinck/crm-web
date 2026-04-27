@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMsal } from "@azure/msal-react";
-import { loginRequest } from "./authConfig";
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { loginRequest, apiRequest } from "./authConfig";
+import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 
 import CustomersPage from "./pages/CustomersPage";
 import CustomerDetail from "./pages/CustomerDetail";
@@ -14,29 +14,17 @@ import UsersAdminPage from "./pages/UsersAdminPage";
 
 import logo from "./assets/logo.png";
 
-function CustomerDetailWrapper() {
-  const location = useLocation();
-  const customer = location.state?.customer;
-
-  if (!customer) {
-    return (
-      <div className="rounded-xl border bg-white p-6">
-        <h2 className="mb-2 text-xl font-bold">Klantenfiche</h2>
-        <p>Klant niet gevonden. Ga terug via de klantenlijst.</p>
-      </div>
-    );
-  }
-
-  return <CustomerDetail customer={customer} />;
-}
-
 export default function App() {
   const { instance, accounts } = useMsal();
   const activeAccount = instance.getActiveAccount() || accounts[0];
   const location = useLocation();
 
-  const [crmRole] = useState("Admin");
+  const apiBase = import.meta.env.VITE_API_BASE_URL;
+
+  const [crmRole, setCrmRole] = useState("");
   const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
+
+  const canUseAdmin = crmRole === "All" || crmRole === "Manager";
 
   const initials = useMemo(() => {
     if (!activeAccount?.name) return "?";
@@ -49,6 +37,38 @@ export default function App() {
   }, [activeAccount]);
 
   useEffect(() => {
+    async function loadScope() {
+      if (!accounts.length) return;
+
+      try {
+        const tokenResponse = await instance.acquireTokenSilent({
+          ...apiRequest,
+          account: accounts[0],
+        });
+
+        const response = await fetch(`${apiBase}/dashboard/filter-options`, {
+          headers: {
+            Authorization: `Bearer ${tokenResponse.accessToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          setCrmRole("");
+          return;
+        }
+
+        const data = await response.json();
+        setCrmRole(data.scopeType ?? "");
+      } catch (error) {
+        console.error("CRM rol laden mislukt:", error);
+        setCrmRole("");
+      }
+    }
+
+    loadScope();
+  }, [accounts, instance, apiBase]);
+
+  useEffect(() => {
     const loadProfilePhoto = async () => {
       if (!accounts.length) return;
 
@@ -58,18 +78,18 @@ export default function App() {
           account: accounts[0],
         });
 
-        const response = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
-          headers: {
-            Authorization: `Bearer ${tokenResponse.accessToken}`,
-          },
-        });
+        const response = await fetch(
+          "https://graph.microsoft.com/v1.0/me/photo/$value",
+          {
+            headers: {
+              Authorization: `Bearer ${tokenResponse.accessToken}`,
+            },
+          }
+        );
 
         if (!response.ok) {
-          if (response.status === 404) {
-            setProfilePhotoUrl("");
-            return;
-          }
-          throw new Error(`Foto laden mislukt (${response.status})`);
+          setProfilePhotoUrl("");
+          return;
         }
 
         const blob = await response.blob();
@@ -82,13 +102,7 @@ export default function App() {
     };
 
     loadProfilePhoto();
-
-    return () => {
-      if (profilePhotoUrl) {
-        URL.revokeObjectURL(profilePhotoUrl);
-      }
-    };
-  }, [accounts.length, instance]);
+  }, [accounts, instance]);
 
   const handleLogin = async () => {
     await instance.loginRedirect(loginRequest);
@@ -96,7 +110,7 @@ export default function App() {
 
   const handleLogout = async () => {
     await instance.logoutRedirect({
-      postLogoutRedirectUri: "http://localhost:5173",
+      postLogoutRedirectUri: window.location.origin,
     });
   };
 
@@ -119,17 +133,12 @@ export default function App() {
     { to: "/products", label: "Artikelen", show: true },
     { to: "/reports", label: "Rapporten", show: true },
     { to: "/settings", label: "Instellingen", show: true },
-    {
-      to: "/admin",
-      label: "Beheer",
-      show: crmRole === "Admin" || crmRole === "Manager",
-    },
+    { to: "/admin", label: "Beheer", show: canUseAdmin },
   ];
 
   const getPageTitle = () => {
-    if (location.pathname.startsWith("/customers/")) {
-      return "Klantenfiche";
-    }
+    if (location.pathname.startsWith("/customers/")) return "Klantenfiche";
+    if (location.pathname === "/beheer/gebruikers") return "Gebruikers beheren";
 
     const current = menuItems.find((item) => item.to === location.pathname);
     return current?.label || "CRM";
@@ -149,7 +158,8 @@ export default function App() {
             .map((item) => {
               const isActive =
                 location.pathname === item.to ||
-                (item.to === "/customers" && location.pathname.startsWith("/customers/"));
+                (item.to === "/customers" &&
+                  location.pathname.startsWith("/customers/"));
 
               return (
                 <Link
@@ -178,7 +188,9 @@ export default function App() {
       <main className="flex-1 p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">{getPageTitle()}</h1>
+            <h1 className="text-3xl font-bold text-slate-900">
+              {getPageTitle()}
+            </h1>
             <div className="mt-1 text-sm text-slate-500">
               {activeAccount.name} · {activeAccount.username}
             </div>
@@ -189,7 +201,9 @@ export default function App() {
               <div className="text-sm font-medium text-slate-900">
                 {activeAccount.name}
               </div>
-              <div className="text-xs text-slate-500">{crmRole}</div>
+              <div className="text-xs text-slate-500">
+                {crmRole || "Geen rol"}
+              </div>
             </div>
 
             {profilePhotoUrl ? (
@@ -213,9 +227,18 @@ export default function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/beheer/gebruikers" element={<UsersAdminPage />} />
+
+          <Route
+            path="/admin"
+            element={canUseAdmin ? <AdminPage /> : <Navigate to="/" replace />}
+          />
+
+          <Route
+            path="/beheer/gebruikers"
+            element={
+              canUseAdmin ? <UsersAdminPage /> : <Navigate to="/" replace />
+            }
+          />
         </Routes>
       </main>
     </div>
