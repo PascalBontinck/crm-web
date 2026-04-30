@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useMsal } from "@azure/msal-react";
-import { useNavigate } from "react-router-dom";
 import {
   ResponsiveContainer,
   BarChart,
@@ -27,9 +26,13 @@ import { apiRequest } from "../authConfig";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: new URL("leaflet/dist/images/marker-icon-2x.png", import.meta.url).href,
+  iconRetinaUrl: new URL(
+    "leaflet/dist/images/marker-icon-2x.png",
+    import.meta.url
+  ).href,
   iconUrl: new URL("leaflet/dist/images/marker-icon.png", import.meta.url).href,
-  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).href,
+  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url)
+    .href,
 });
 
 function ClickableMapMarker({ position, onMapClick }) {
@@ -116,18 +119,113 @@ function formatPercentage(value) {
   );
 }
 
+function formatDate(value) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("nl-BE");
+}
+
 function getBarColor(current, previous) {
   if (previous === null || previous === undefined) return "#16a34a";
   return current >= previous ? "#16a34a" : "#dc2626";
 }
 
+function Difference({ value, type = "aantal" }) {
+  const val = Number(value || 0);
+
+  return (
+    <span className={val >= 0 ? "text-green-700" : "text-red-700"}>
+      {val >= 0 ? "▲ " : "▼ "}
+      {type === "euro" ? `€ ${formatCurrency(val)}` : formatCurrency(val)}
+    </span>
+  );
+}
+
+function ArtikelAnalyseTable({ title, rows = [], jaar, vorigJaar }) {
+  return (
+    <InfoCard title={title}>
+      <div className="max-h-[420px] overflow-auto">
+        <table className="min-w-[1100px] w-full text-sm">
+          <thead className="sticky top-0 bg-white">
+            <tr className="border-b text-left">
+              <th className="w-[320px] py-2">Artikel</th>
+              <th className="py-2 text-right">Aantal {jaar}</th>
+              <th className="py-2 text-right">Aantal {vorigJaar}</th>
+              <th className="py-2 text-right">Δ aantal</th>
+              <th className="py-2 text-right border-l pl-4">Omzet {jaar}</th>
+              <th className="py-2 text-right">Omzet {vorigJaar}</th>
+              <th className="py-2 text-right">Δ omzet</th>
+              <th className="py-2 text-right">Laatste aankoop</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {rows.map((r, index) => (
+              <tr
+                key={`${r.artnr}-${index}`}
+                className={`border-b ${
+                  index % 2 === 0 ? "bg-white" : "bg-slate-50"
+                }`}
+              >
+                <td className="py-2 pr-3">
+                  <div className="font-medium whitespace-normal break-words leading-tight">
+                    {r.artikelnaam || "Onbekend"}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {r.artnr} · {r.hoofdgroepnaam || "-"} /{" "}
+                    {r.artikelgroepnaam || "-"}
+                  </div>
+                </td>
+
+                <td className="py-2 text-right">
+                  {formatCurrency(r.aantalHuidig)}
+                </td>
+                <td className="py-2 text-right">
+                  {formatCurrency(r.aantalVorig)}
+                </td>
+                <td className="py-2 text-right font-semibold">
+                  <Difference value={r.aantalVerschil} />
+                </td>
+
+                <td className="py-2 text-right border-l pl-4">
+                  € {formatCurrency(r.omzetHuidig)}
+                </td>
+                <td className="py-2 text-right">
+                  € {formatCurrency(r.omzetVorig)}
+                </td>
+                <td className="py-2 text-right font-semibold">
+                  <Difference value={r.omzetVerschil} type="euro" />
+                </td>
+
+                <td className="py-2 text-right text-gray-500">
+                  {formatDate(r.laatsteAankoop)}
+                </td>
+              </tr>
+            ))}
+
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan="8" className="py-6 text-center text-gray-500">
+                  Geen gegevens gevonden.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </InfoCard>
+  );
+}
+
 export default function CustomerDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { instance, accounts } = useMsal();
 
   const [customer, setCustomer] = useState(null);
   const [monthlyRevenue, setMonthlyRevenue] = useState([]);
   const [yearlyRevenue, setYearlyRevenue] = useState([]);
+  const [artikelAnalyse, setArtikelAnalyse] = useState(null);
+
   const [selectedYear, setSelectedYear] = useState(null);
   const [mapPosition, setMapPosition] = useState(null);
   const [mapLoading, setMapLoading] = useState(false);
@@ -162,6 +260,7 @@ export default function CustomerDetail() {
       try {
         setLoading(true);
         setMelding("");
+        setArtikelAnalyse(null);
 
         const accessToken = await getAccessToken();
 
@@ -194,6 +293,23 @@ export default function CustomerDetail() {
         }
 
         setCustomer(customerData);
+
+        const artikelAnalyseRes = await fetch(
+          `${apiBase}/artikelkopersanalyse/klant/${customerData.klantnr}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: "application/json",
+            },
+          }
+        );
+
+        if (artikelAnalyseRes.ok) {
+          const artikelAnalyseText = await artikelAnalyseRes.text();
+          if (artikelAnalyseText) {
+            setArtikelAnalyse(JSON.parse(artikelAnalyseText));
+          }
+        }
 
         const monthlyRes = await fetch(
           `${apiBase}/invoices/customer/${customerData.klantnr}/monthly`,
@@ -260,7 +376,9 @@ export default function CustomerDetail() {
         }
 
         const sortedYearly = Array.isArray(yearlyData)
-          ? [...yearlyData].sort((a, b) => String(a.jaar).localeCompare(String(b.jaar)))
+          ? [...yearlyData].sort((a, b) =>
+              String(a.jaar).localeCompare(String(b.jaar))
+            )
           : [];
 
         setYearlyRevenue(sortedYearly);
@@ -316,7 +434,9 @@ export default function CustomerDetail() {
         setMapPosition(null);
 
         for (const query of queries) {
-          const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=be&q=${encodeURIComponent(query)}`;
+          const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=be&q=${encodeURIComponent(
+            query
+          )}`;
 
           const res = await fetch(url, {
             headers: {
@@ -407,7 +527,6 @@ export default function CustomerDetail() {
   };
 
   const currentYear = new Date().getFullYear().toString();
-  const navigate = useNavigate();
 
   const omzetHuidigJaar = useMemo(() => {
     const match = yearlyRevenue.find((y) => String(y.jaar) === currentYear);
@@ -448,7 +567,9 @@ export default function CustomerDetail() {
       const previousPeriode = `${previousYear}.${month}`;
 
       const currentMatch = monthlyRevenue.find((m) => m.periode === periode);
-      const previousMatch = monthlyRevenue.find((m) => m.periode === previousPeriode);
+      const previousMatch = monthlyRevenue.find(
+        (m) => m.periode === previousPeriode
+      );
 
       const omzetHuidigJaar = currentMatch?.omzet ?? 0;
       const omzetVorigJaar = previousMatch?.omzet ?? 0;
@@ -496,7 +617,9 @@ export default function CustomerDetail() {
   if (melding) {
     return (
       <div className="p-6">
-        <div className="rounded-lg bg-gray-100 px-3 py-2 text-sm">{melding}</div>
+        <div className="rounded-lg bg-gray-100 px-3 py-2 text-sm">
+          {melding}
+        </div>
       </div>
     );
   }
@@ -510,7 +633,8 @@ export default function CustomerDetail() {
       <div>
         <h1 className="text-3xl font-bold">{customer.klantNaam}</h1>
         <p className="text-sm text-gray-500">
-          Klantnr {customer.klantnr} · {customer.vert || "Geen vertegenwoordiger"}
+          Klantnr {customer.klantnr} ·{" "}
+          {customer.vert || "Geen vertegenwoordiger"}
         </p>
       </div>
 
@@ -527,17 +651,22 @@ export default function CustomerDetail() {
       </div>
 
       <InfoCard title="Omzet huidig jaar">
-        <div className="text-3xl font-bold">€ {formatCurrency(omzetHuidigJaar)}</div>
+        <div className="text-3xl font-bold">
+          € {formatCurrency(omzetHuidigJaar)}
+        </div>
         <div className="text-sm text-gray-500">Excl. btw</div>
       </InfoCard>
 
       <InfoCard title="Omzet per jaar">
         {yearlyChartData.length === 0 ? (
-          <div className="text-sm text-gray-500">Geen omzetgegevens gevonden.</div>
+          <div className="text-sm text-gray-500">
+            Geen omzetgegevens gevonden.
+          </div>
         ) : (
           <>
             <div className="mb-3 text-sm text-gray-500">
-              Klik op een jaartal om de maandomzet en vergelijking met het jaar ervoor te tonen.
+              Klik op een jaartal om de maandomzet en vergelijking met het jaar
+              ervoor te tonen.
             </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -553,7 +682,11 @@ export default function CustomerDetail() {
                     }}
                   >
                     {yearlyChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} cursor="pointer" />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.fill}
+                        cursor="pointer"
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -564,15 +697,22 @@ export default function CustomerDetail() {
       </InfoCard>
 
       {selectedYear && (
-        <InfoCard title={`Omzet per maand - ${selectedYear} vs ${Number(selectedYear) - 1}`}>
+        <InfoCard
+          title={`Omzet per maand - ${selectedYear} vs ${
+            Number(selectedYear) - 1
+          }`}
+        >
           <div className="mb-3 text-sm text-gray-500">
-            Vergelijking van elke maand met hetzelfde maandcijfer van het jaar ervoor.
+            Vergelijking van elke maand met hetzelfde maandcijfer van het jaar
+            ervoor.
           </div>
 
           {monthlyComparisonData.every(
             (m) => m.omzetHuidigJaar === 0 && m.omzetVorigJaar === 0
           ) ? (
-            <div className="text-sm text-gray-500">Geen maandgegevens gevonden.</div>
+            <div className="text-sm text-gray-500">
+              Geen maandgegevens gevonden.
+            </div>
           ) : (
             <>
               <div className="h-80">
@@ -607,7 +747,9 @@ export default function CustomerDetail() {
                     <tr className="text-left">
                       <th className="px-3 py-2">Maand</th>
                       <th className="px-3 py-2 text-right">{selectedYear}</th>
-                      <th className="px-3 py-2 text-right">{Number(selectedYear) - 1}</th>
+                      <th className="px-3 py-2 text-right">
+                        {Number(selectedYear) - 1}
+                      </th>
                       <th className="px-3 py-2 text-right">Verschil</th>
                       <th className="px-3 py-2 text-right">Verschil %</th>
                     </tr>
@@ -624,14 +766,18 @@ export default function CustomerDetail() {
                         </td>
                         <td
                           className={`px-3 py-2 text-right ${
-                            row.verschil >= 0 ? "text-green-700" : "text-red-700"
+                            row.verschil >= 0
+                              ? "text-green-700"
+                              : "text-red-700"
                           }`}
                         >
                           € {formatCurrency(row.verschil)}
                         </td>
                         <td
                           className={`px-3 py-2 text-right ${
-                            row.verschil >= 0 ? "text-green-700" : "text-red-700"
+                            row.verschil >= 0
+                              ? "text-green-700"
+                              : "text-red-700"
                           }`}
                         >
                           {formatPercentage(row.verschilPercentage)}
@@ -646,9 +792,71 @@ export default function CustomerDetail() {
         </InfoCard>
       )}
 
+      {artikelAnalyse && (
+        <div className="space-y-4">
+          <InfoCard title="Artikelanalyse van deze klant">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div>
+                <div className="text-sm text-gray-500">Koopt nu</div>
+                <div className="text-2xl font-bold text-green-700">
+                  {artikelAnalyse.kooptNu?.length || 0}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500">Koopt niet meer</div>
+                <div className="text-2xl font-bold text-red-700">
+                  {artikelAnalyse.kooptNietMeer?.length || 0}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500">Koopt minder</div>
+                <div className="text-2xl font-bold text-orange-600">
+                  {artikelAnalyse.kooptMinder?.length || 0}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500">Nieuwe artikelen</div>
+                <div className="text-2xl font-bold text-green-700">
+                  {artikelAnalyse.kooptNieuw?.length || 0}
+                </div>
+              </div>
+            </div>
+          </InfoCard>
+
+          <ArtikelAnalyseTable
+            title="Artikelen die deze klant nu koopt"
+            rows={artikelAnalyse.kooptNu}
+            jaar={artikelAnalyse.jaar}
+            vorigJaar={artikelAnalyse.vorigJaar}
+          />
+
+          <ArtikelAnalyseTable
+            title="Artikelen die deze klant niet meer koopt"
+            rows={artikelAnalyse.kooptNietMeer}
+            jaar={artikelAnalyse.jaar}
+            vorigJaar={artikelAnalyse.vorigJaar}
+          />
+
+          <ArtikelAnalyseTable
+            title="Artikelen die deze klant minder koopt"
+            rows={artikelAnalyse.kooptMinder}
+            jaar={artikelAnalyse.jaar}
+            vorigJaar={artikelAnalyse.vorigJaar}
+          />
+
+          <ArtikelAnalyseTable
+            title="Nieuwe artikelen bij deze klant"
+            rows={artikelAnalyse.kooptNieuw}
+            jaar={artikelAnalyse.jaar}
+            vorigJaar={artikelAnalyse.vorigJaar}
+          />
+        </div>
+      )}
+
       <InfoCard title="Locatie">
         <div className="text-sm text-gray-500">
-          Klik op de kaart om de marker te verplaatsen en sla daarna de locatie op.
+          Klik op de kaart om de marker te verplaatsen en sla daarna de locatie
+          op.
         </div>
 
         {mapLoading ? (
@@ -667,7 +875,7 @@ export default function CustomerDetail() {
                 style={{ height: "100%", width: "100%" }}
               >
                 <TileLayer
-                  attribution='&copy; OpenStreetMap contributors'
+                  attribution="&copy; OpenStreetMap contributors"
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <ClickableMapMarker
@@ -686,29 +894,16 @@ export default function CustomerDetail() {
                 {savingLocation ? "Opslaan..." : "Opslaan locatie"}
               </button>
 
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900">
-                    {customer?.klantNaam}
-                  </h1>
-                  <div className="text-sm text-slate-500">
-                    Klantnr: {customer?.klantnr} · Gemeente: {customer?.klantGemeente || "-"}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() =>
-                      navigate("/reports", {
-                        state: { customerId: customer.id },
-                      })
-                    }
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    Rapporten beheren
-                  </button>
-                </div>
-              </div>              
+              <button
+                onClick={() =>
+                  navigate("/reports", {
+                    state: { customerId: customer.id },
+                  })
+                }
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Rapporten beheren
+              </button>
 
               {googleMapsUrl && (
                 <a

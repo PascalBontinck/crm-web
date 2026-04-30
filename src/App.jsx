@@ -11,6 +11,9 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminPage from "./pages/AdminPage";
 import UsersAdminPage from "./pages/UsersAdminPage";
+import ArtikelBeheerPage from "./pages/ArtikelBeheerPage";
+import ArtikelDashboardPage from "./pages/ArtikelDashboardPage";
+import ArtikelKopersAnalysePage from "./pages/ArtikelKopersAnalysePage";
 
 import logo from "./assets/logo.png";
 
@@ -130,7 +133,9 @@ export default function App() {
   const menuItems = [
     { to: "/", label: "Dashboard", show: true },
     { to: "/customers", label: "Klanten", show: true },
-    { to: "/products", label: "Artikelen", show: true },
+    { to: "/artikelbeheer", label: "Artikelbeheer", show: true },
+    { to: "/artikel-dashboard", label: "Artikel dashboard", show: true },
+    { to: "/artikel-kopersanalyse", label: "Kopersanalyse", show: true },
     { to: "/reports", label: "Rapporten", show: true },
     { to: "/settings", label: "Instellingen", show: true },
     { to: "/admin", label: "Beheer", show: canUseAdmin },
@@ -227,7 +232,14 @@ export default function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/artikelbeheer" element={<ArtikelBeheerPage />} />
+          <Route path="/artikel-dashboard" element={<ArtikelDashboardPage />} />
 
+          <Route
+            path="/artikel-kopersanalyse"
+            element={<ArtikelKopersAnalysePage />}
+          />
+          
           <Route
             path="/admin"
             element={canUseAdmin ? <AdminPage /> : <Navigate to="/" replace />}

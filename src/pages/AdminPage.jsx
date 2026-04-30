@@ -4,6 +4,8 @@ import CustomersBeheer from "../components/customers/CustomersBeheer";
 import InvoicesBeheer from "../components/invoices/InvoicesBeheer";
 import CustomerLocationsBeheer from "../components/customers/CustomerLocationsBeheer";
 import { useNavigate } from "react-router-dom";
+import ArtikelHistoriekBeheer from "../components/artikelhistoriek/ArtikelHistoriekBeheer";
+import SalesRepGroupsAdmin from "../components/admin/SalesRepGroupsAdmin";
 
 export default function AdminPage() {
   const [activeSection, setActiveSection] = useState(null);
@@ -92,12 +94,50 @@ export default function AdminPage() {
             Vul automatisch locaties in voor klanten zonder coördinaten.
           </div>
         </button>
+
+        <button
+          onClick={() =>
+            setActiveSection(
+              activeSection === "salesRepGroups" ? null : "salesRepGroups"
+            )
+          }
+          className={`rounded-xl border p-6 text-left transition ${
+            activeSection === "salesRepGroups"
+              ? "border-blue-500 bg-blue-50"
+              : "bg-white hover:bg-gray-50"
+          }`}
+        >
+          <div className="mb-2 text-lg font-bold">Vertegenwoordigersgroepen</div>
+          <div className="text-sm text-gray-600">
+            Groepeer verkoperscodes zoals ADV + TO* en KVB + TA*.
+          </div>
+        </button>
+
+        <button
+          onClick={() =>
+            setActiveSection(
+              activeSection === "artikelhistoriek" ? null : "artikelhistoriek"
+            )
+          }
+          className={`rounded-xl border p-6 text-left transition ${
+            activeSection === "artikelhistoriek"
+              ? "border-blue-500 bg-blue-50"
+              : "bg-white hover:bg-gray-50"
+          }`}
+        >
+          <div className="mb-2 text-lg font-bold">Beheer artikelhistoriek</div>
+          <div className="text-sm text-gray-600">
+            Importeer artikelen en historieken uit Excel.
+          </div>
+        </button>        
       </div>
 
       {activeSection === "verkopers" && <VerkopersBeheer />}
       {activeSection === "klanten" && <CustomersBeheer />}
       {activeSection === "invoices" && <InvoicesBeheer />}
       {activeSection === "locations" && <CustomerLocationsBeheer />}
+      {activeSection === "artikelhistoriek" && <ArtikelHistoriekBeheer />}
+      {activeSection === "salesRepGroups" && <SalesRepGroupsAdmin />}
     </div>
   );
 }
